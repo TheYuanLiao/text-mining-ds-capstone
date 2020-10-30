@@ -1,0 +1,88 @@
+---
+title: "Descriptive analysis"
+author: "Yuan Liao"
+date: "10/30/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libs, include=TRUE, warning=FALSE, message=FALSE}
+library(tm)
+library(qdap)
+
+stats <- list()
+stats$lengths <- list()
+stats$lines <- list()
+
+glimpse <- function(var, stats){
+  f <- paste0("../dbs/en_US/en_US.", var, ".txt")
+  con <- file(f, "r")
+  # Take the first three lines to take a look
+  l <- readLines(con=con, 3)
+  
+  # Count how many lines in total
+  len <- length(readLines(con=con, encoding = 'UTF-8'))
+  close(con=con)
+  
+  # Find the longest lines
+  con <- file(f, "r")
+  L <- lapply(readLines(con=con, encoding = 'UTF-8'), nchar)
+  L.max <- max(unlist(L), na.rm = TRUE)
+  close(con=con)
+  
+  # Close the file connection and print the first three lines
+  stats$lengths[[var]] <- len
+  stats$lines[[var]] <- L.max
+  print(l)
+  return(stats)
+}
+```
+This document takes dbs/en_US/ as an example to explore data format and compute the basic statistics of the dataset.
+
+## 1 Data format
+There are three sources of the data: blogs, news, and twitter.
+
+### 1-1 en_US.blogs.txt
+```{r data blog-samples, warning=FALSE, message=FALSE}
+stats <- glimpse('blogs', stats)
+
+```
+
+### 1-2 en_US.news.txt
+```{r data news-samples, warning=FALSE, message=FALSE}
+stats <- glimpse('news', stats)
+```
+
+### 1-3 en_US.twitter.txt
+```{r data twitter-samples, warning=FALSE, message=FALSE}
+stats <- glimpse('twitter', stats)
+```
+
+### 2 Statistics
+
+|         | No. of lines              | No. of characters of the longest line |
+|---------|---------------------------|---------------------------------------|
+| blogs   | `r stats$lengths$blogs`   | `r stats$lines$blogs`                 |
+| news    | `r stats$lengths$news`    | `r stats$lines$news`                  |
+| twitter | `r stats$lengths$twitter` | `r stats$lines$twitter`               |
+
+### 3 Preliminary word/sentence matching in en_US.twitter.txt
+#### 3-1 Occurance of "love" and "hate"
+```{r tweets-love-hate}
+var <- 'twitter'
+f <- paste0("../dbs/en_US/en_US.", var, ".txt")
+
+# Find the occurance of a certain word
+word_match <- function(f){
+  con <- file(f, "r")
+  l <- unlist(lapply(readLines(con=con, encoding = 'UTF-8'), function(x){grepl("love", x)}))
+  word.count <- length(l[l==TRUE])
+  close(con=con)
+  return(word.count)
+}
+
+
+```
