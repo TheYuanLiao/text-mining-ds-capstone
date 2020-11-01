@@ -1,5 +1,5 @@
 ---
-title: "Descriptive analysis"
+title: "Descriptive analysis (Week 1)"
 author: "Yuan Liao"
 date: "10/30/2020"
 output: html_document
@@ -8,6 +8,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+This notebook explores the Corpora data. And it answers the questions in Week 1 quiz of [Data Sciencen Capstone](https://www.coursera.org/learn/data-science-project).
 
 ```{r libs, include=TRUE, warning=FALSE, message=FALSE}
 library(tm)
@@ -70,19 +71,49 @@ stats <- glimpse('twitter', stats)
 | twitter | `r stats$lengths$twitter` | `r stats$lines$twitter`               |
 
 ### 3 Preliminary word/sentence matching in en_US.twitter.txt
-#### 3-1 Occurance of "love" and "hate"
-```{r tweets-love-hate}
-var <- 'twitter'
-f <- paste0("../dbs/en_US/en_US.", var, ".txt")
-
+The below block defines the function to count certain words and extract the lines where certain words occur.
+```{r word-exploring functions, warning=FALSE}
 # Find the occurance of a certain word
-word_match <- function(f){
+word_match <- function(f, wd){
   con <- file(f, "r")
-  l <- unlist(lapply(readLines(con=con, encoding = 'UTF-8'), function(x){grepl("love", x)}))
+  l <- unlist(lapply(readLines(con=con, encoding = 'UTF-8'), function(x){grepl(wd, x)}))
   word.count <- length(l[l==TRUE])
   close(con=con)
   return(word.count)
 }
 
+# Find the occurance of a certain word
+word_match_get <- function(f, wd){
+  con <- file(f, "r")
+  l <- unlist(lapply(readLines(con=con, encoding = 'UTF-8'), function(x){if(grepl(wd, x)){x}}))
+  close(con=con)
+  return(l)
+}
 
+```
+
+#### 3-1 Occurance of "love" over "hate"
+Divide the number of lines where the word "love" (all lowercase) occurs by the number of lines the word "hate" (all lowercase) occurs.
+```{r tweets-love-hate, warning=FALSE, message=FALSE}
+var <- 'twitter'
+f <- paste0("../dbs/en_US/en_US.", var, ".txt")
+word_match(f, 'love') / word_match(f, 'hate')
+```
+
+#### 3-2 The one tweet with "biostats"
+
+```{r tweets-biostats, warning=FALSE, message=FALSE}
+var <- 'twitter'
+f <- paste0("../dbs/en_US/en_US.", var, ".txt")
+word_match_get(f, 'biostats')
+```
+
+#### 3-3 Occurance a sentence
+"A computer once beat me at chess, but it was no match for me at kickboxing"
+
+```{r tweets-sentence, warning=FALSE, message=FALSE}
+var <- 'twitter'
+f <- paste0("../dbs/en_US/en_US.", var, ".txt")
+wd <- "A computer once beat me at chess, but it was no match for me at kickboxing"
+word_match(f, wd)
 ```
