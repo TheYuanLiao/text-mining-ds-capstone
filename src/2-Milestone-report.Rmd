@@ -1,0 +1,410 @@
+---
+title: 'Exploring the Corpora for Word Prediction'
+subtitle: 'Milestone report (Week 2)'
+author: "Yuan Liao"
+date: "11/10/2020"
+output: html_document
+---
+The target of this [Data Science Capstone](https://www.coursera.org/learn/data-science-project) project is to create word prediction models based on the Corpora data set. The [Corpora](http://web.archive.org/web/20160930083655/http://www.corpora.heliohost.org/aboutcorpus.html) are collected from publicly available sources by a web crawler covering sources of blogs, news, and tweets. The data set was retrieved from the course [webpage](https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip).
+
+This report explains the exploratory analysis and the goals for the eventual app and algorithm.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1 Basic statistics of the data set {.tabset}
+This section takes dbs/en_US/ as an example to explore the data format and compute the basic statistics of the data set.
+```{r libs, include=TRUE, warning=FALSE, message=FALSE, echo=FALSE}
+library(tm)
+library(qdap)
+
+stats <- list()
+stats$lengths <- list()
+stats$lines <- list()
+
+glimpse <- function(var, stats){
+  f <- paste0("../dbs/en_US/en_US.", var, ".txt")
+  con <- file(f, "r")
+  # Take the first three lines to take a look
+  l <- readLines(con=con, 3)
+  
+  # Count how many lines in total
+  len <- length(readLines(con=con, encoding = 'UTF-8'))
+  close(con=con)
+  
+  # Find the longest lines
+  con <- file(f, "r")
+  L <- lapply(readLines(con=con, encoding = 'UTF-8'), nchar)
+  L.max <- max(unlist(L), na.rm = TRUE)
+  close(con=con)
+  
+  # Close the file connection and print the first three lines
+  stats$lengths[[var]] <- len
+  stats$lines[[var]] <- L.max
+  print(l)
+  return(stats)
+}
+```
+
+There are three sources of the data: blogs, news, and twitter. Let's take a look at a sample of each of them.
+
+### en_US.blogs.txt
+```{r data blog-samples, warning=FALSE, message=FALSE, echo=FALSE}
+stats <- glimpse('blogs', stats)
+```
+
+### en_US.news.txt
+```{r data news-samples, warning=FALSE, message=FALSE, echo=FALSE}
+stats <- glimpse('news', stats)
+```
+
+### en_US.twitter.txt
+```{r data twitter-samples, warning=FALSE, message=FALSE, echo=FALSE}
+stats <- glimpse('twitter', stats)
+```
+
+## {-}
+
+|         | No. of lines              | No. of characters of the longest line |
+|---------|---------------------------|---------------------------------------|
+| blogs   | `r stats$lengths$blogs`   | `r stats$lines$blogs`                 |
+| news    | `r stats$lengths$news`    | `r stats$lines$news`                  |
+| twitter | `r stats$lengths$twitter` | `r stats$lines$twitter`               |
+
+## 2 Tokenization and cleaning {.tabset}
+This step identifies appropriate tokens such as words, punctuation, and numbers for each text record. The below function takes a file as input and returns a tokenized version of it. Punctuation and numbers are removed. All the word tokens are in lower case.
+
+### One-word-based method
+
+```{r tokenize, include=TRUE, warning=FALSE, message=FALSE}
+library(tidytext)
+library(dplyr)
+library(stringr)
+library(lexicon)
+
+tokenize <- function(var){
+  f <- paste0("../dbs/en_US/en_US.", var, ".txt")
+
+  # Read the text file into a table
+  # d <- read.delim(textConnection(readLines(f)), sep="\n", header=FALSE)
+  d <- data.frame(`text`=readLines(f))
+  d$source <- var
+  d <- d %>%
+    # Remove punctuations and convert to lower-case
+    unnest_tokens(word, text) %>%
+    
+    # Remove words which contain numbers
+    filter(grepl("^[A-Za-z]+$", word, perl = T)) %>%
+  
+    # Remove profanity words
+    filter(!word %in% unique(tolower(lexicon::profanity_alvarez)))
+  return(d)
+}
+```
+
+Taking en_US.news.txt for example, the tokenized and cleaned data are shown below.
+
+```{r token_example, warning=FALSE, message=FALSE, echo=FALSE}
+df <- tokenize('news')
+head(df)
+```
+
+### N-word-based method
+Instead of looking into each single word in a sample of text, we can gain more insights into the context if we look into the consecutive sequences of words which are called n-grams.
+
+```{r tokenize_ngrams, include=TRUE, warning=FALSE, message=FALSE}
+library(tidyr)
+tokenize_ngrams <- function(var, n){
+  f <- paste0("../dbs/en_US/en_US.", var, ".txt")
+
+  # Read the text file into a table
+  # d <- read.delim(textConnection(readLines(f)), sep="\n", header=FALSE)
+  d <- data.frame(`text`=readLines(f))
+  d$source <- var
+  d <- d %>%
+    # Remove punctuations and convert to lower-case
+    unnest_tokens(ngram, text, token='ngrams', n=n)
+  
+  wcols <- unlist(lapply(1:n, function(x){paste0('word', x)}))
+  
+  d_separated <- d %>%
+    # Separate n-grams
+    separate(ngram, wcols, sep = " ")
+  
+  for (word in wcols) {
+    d_separated <- d_separated %>%
+    
+    # Remove numbers
+    filter(grepl("^[A-Za-z]+$", !!as.symbol(word), perl = T)) %>%
+  
+    # Remove profanity words
+    filter(!(!!as.symbol(word)) %in% unique(tolower(lexicon::profanity_alvarez)))
+  }
+  return(d_separated)
+}
+```
+
+Taking en_US.news.txt for example, the tokenized and cleaned 2-grams (word pairs) are shown below.
+
+```{r token_example_ngrams, warning=FALSE, message=FALSE}
+df2 <- tokenize_ngrams('news', n=2)
+df2 <- df2 %>%
+  unite(ngram, word1, word2, sep = " ")
+head(df2)
+```
+
+## 3 Exploratory analysis
+This section explores the distribution and relationship between the words and phrases in the text of the corpora. Specifically, the frequencies of phrases are summarized into figures and tables to understand variation in the frequencies of words, word pairs, and word triads in the data.
+
+```{r wordfreq, include=TRUE, warning=FALSE, message=FALSE}
+# n <= 3
+phrase_frequency <- function(var, n, coverage){
+  if (n == 1){
+    df <- tokenize(var)
+    df <- df %>%
+      count(word, sort=TRUE) %>%
+      mutate(share=n/sum(n)*100) %>%
+      mutate(cum_share=cumsum(share))
+  }else{
+    df <- tokenize_ngrams(var, n=n)
+    if (n == 2){
+    df <- df %>%
+      unite(ngram, word1, word2, sep = " ") %>%
+      count(ngram, sort=TRUE) %>%
+      mutate(share=n/sum(n)*100) %>%
+      mutate(cum_share=cumsum(share))
+    }else{
+      df <- df %>%
+        unite(ngram, word1, word2, word3, sep = " ") %>%
+        count(ngram, sort=TRUE) %>%
+        mutate(share=n/sum(n)*100) %>%
+        mutate(cum_share=cumsum(share))
+    }
+  }
+  df$source <- var
+  df <- df %>% filter(cum_share <= coverage)
+  return(df)
+}
+```
+
+### 3-1 Word frequency
+Prepare and combine the count of unique words of different sources.
+
+```{r wordfreq_count, include=TRUE, warning=FALSE, message=FALSE}
+# Single word
+df <- rbind(phrase_frequency(var='news', n=1, coverage=50),
+            phrase_frequency(var='blogs', n=1, coverage=50),
+            phrase_frequency(var='twitter', n=1, coverage=50))
+head(df)
+```
+
+As we see in the below figure, the top 20 words are mainly stop words. After excluding stop words, the total number of unique words drop significantly. 
+
+```{r word_freq_plot, include=TRUE, warning=FALSE, message=FALSE, echo=FALSE}
+library(ggplot2)
+library(ggpubr)
+library(viridis)
+options(scipen=10000)
+
+total_words <- df %>%
+  group_by(word) %>%
+  summarize(total=sum(n))
+
+df2plot <- left_join(df, total_words)
+
+df2plot1 <- df2plot %>%
+  arrange(desc(total)) %>%
+  group_by(source) %>%
+  slice(1:20)
+
+df2plot1src <- df %>%
+  group_by(source) %>%
+  arrange(desc(n)) %>%
+  slice(1:20)
+
+df2plot2 <- df2plot %>%
+  # Remove stop words
+  filter(!word %in% stop_words$word) %>%
+  arrange(desc(total)) %>%
+  group_by(source) %>%
+  slice(1:20)
+
+df2plot2src <- df %>%
+  # Remove stop words
+  filter(!word %in% stop_words$word) %>%
+  group_by(source) %>%
+  arrange(desc(n)) %>%
+  slice(1:20)
+
+g1 <- ggplot(data=df2plot1, aes(x=reorder(word, total), y=n/1000, fill=source)) +
+  labs(x='Word',
+       y='Frequency (1K)') +
+  geom_bar(position='stack', stat='identity') +
+  scale_fill_viridis(discrete = T) +
+  ggtitle('Including stop words') +
+  theme_minimal() +
+  coord_flip()
+
+g2 <- ggplot(data=df2plot1src, aes(x=reorder(word, n), y=n/1000, fill=source)) +
+  labs(x='Word',
+       y='Frequency (1K)') +
+  geom_bar(stat='identity') +
+  scale_fill_viridis(discrete = T) +
+  facet_grid(. ~source, scales="free") +
+  theme_minimal() +
+  coord_flip()
+
+g3 <- ggplot(data=df2plot2, aes(x=reorder(word, total), y=n/1000, fill=source)) +
+  labs(x='Word',
+       y='Frequency (1K)') +
+  geom_bar(position='stack', stat='identity') +
+  scale_fill_viridis(discrete = T) +
+  ggtitle('Excluding stop words') +
+  theme_minimal() +
+  coord_flip()
+
+g4 <- ggplot(data=df2plot2src, aes(x=reorder(word, n), y=n/1000, fill=source)) +
+  labs(x='Word',
+       y='Frequency (1K)') +
+  geom_bar(stat='identity') +
+  scale_fill_viridis(discrete = T) +
+  facet_grid(.~source, scales="free") +
+  theme_minimal() +
+  coord_flip()
+
+ggarrange(g1, g3, ncol = 2, nrow = 1)
+```
+
+Moreover, the top 20 words seem to be dominated by the tweets which account for a big proportion of all the records from different sources. It is interesting to see the top 20 words by source, as shown below. The left part shows the top 20 words including stop words. As compared with the narratives of blogs and Twitter, the nature of news being objective can be seen from the less frequent use of "I", "you", "me", and "your", but more frequent use of "at", "he", "his", "said", and "from". The right part shows the top 20 words excluding stop words. The blogs and Twitter have distinct word patterns as compared with the news.
+
+```{r word_freq_plot_src, include=TRUE, warning=FALSE, message=FALSE, echo=FALSE}
+ggarrange(g2, g4, ncol = 2, nrow = 1)
+```
+
+<div class="alert alert-info">
+  <strong>Note of stop words.</strong> In sentiment analysis for example, stop words are often removed due to little relevant information. In the context of this project, however, it is important to keep stop words as the core purpose is to predict next word.
+</div>
+
+### 3-2 Word pairs and word triads {.tabset}
+The distributions of word pairs and triads tell us more information about what word tends to come next given the prior word(s).
+
+#### Word pairs
+```{r wordfreq_count2, include=TRUE, warning=FALSE, message=FALSE}
+# 2-gram
+df2 <- rbind(phrase_frequency(var='news', n=2, coverage=50),
+            phrase_frequency(var='blogs', n=2, coverage=50),
+            phrase_frequency(var='twitter', n=2, coverage=50))
+head(df2)
+```
+
+```{r word_freq_plot2, include=TRUE, warning=FALSE, message=FALSE, echo=FALSE}
+total_words <- df2 %>%
+  group_by(ngram) %>%
+  summarize(total=sum(n))
+
+df22plot <- left_join(df2, total_words)
+
+df22plot1 <- df22plot %>%
+  arrange(desc(total)) %>%
+  group_by(source) %>%
+  slice(1:20)
+
+df22plot1src <- df2 %>%
+  group_by(source) %>%
+  arrange(desc(n)) %>%
+  slice(1:20)
+
+g1 <- ggplot(data=df22plot1, aes(x=reorder(ngram, total), y=n/1000, fill=source)) +
+  labs(x='Word pair',
+       y='Frequency (1K)') +
+  geom_bar(position='stack', stat='identity') +
+  scale_fill_viridis(discrete = T) +
+  ggtitle('Aggregate top 20') +
+  theme_minimal() +
+  coord_flip()
+
+g2 <- ggplot(data=df22plot1src, aes(x=reorder(ngram, n), y=n/1000, fill=source)) +
+  labs(x='Word pair',
+       y='Frequency (1K)') +
+  geom_bar(stat='identity') +
+  scale_fill_viridis(discrete = T) +
+  ggtitle('Top 20 by source') +
+  facet_grid(. ~source, scales="free") +
+  theme_minimal() +
+  coord_flip()
+
+ggarrange(g1, g2, ncol = 2, nrow = 1)
+```
+
+#### Word triads
+```{r wordfreq_count3, include=TRUE, warning=FALSE, message=FALSE}
+# 3-gram phrase
+df3 <- rbind(phrase_frequency(var='news', n=3, coverage=50),
+            phrase_frequency(var='blogs', n=3, coverage=50),
+            phrase_frequency(var='twitter', n=3, coverage=50))
+head(df3)
+```
+
+```{r word_freq_plot3, include=TRUE, warning=FALSE, message=FALSE, echo=FALSE}
+total_words <- df3 %>%
+  group_by(ngram) %>%
+  summarize(total=sum(n))
+
+df32plot <- left_join(df3, total_words)
+
+df32plot1 <- df32plot %>%
+  arrange(desc(total)) %>%
+  group_by(source) %>%
+  slice(1:20)
+
+df32plot1src <- df3 %>%
+  group_by(source) %>%
+  arrange(desc(n)) %>%
+  slice(1:20)
+
+g1 <- ggplot(data=df32plot1, aes(x=reorder(ngram, total), y=n/1000, fill=source)) +
+  labs(x='Word triad',
+       y='Frequency (1K)') +
+  geom_bar(position='stack', stat='identity') +
+  scale_fill_viridis(discrete = T) +
+  ggtitle('Aggregate top 20') +
+  theme_minimal() +
+  coord_flip()
+
+g2 <- ggplot(data=df32plot1src, aes(x=reorder(ngram, n), y=n/1000, fill=source)) +
+  labs(x='Word triad',
+       y='Frequency (1K)') +
+  geom_bar(stat='identity') +
+  scale_fill_viridis(discrete = T) +
+  ggtitle('Top 20 by source') +
+  facet_grid(. ~source, scales="free") +
+  theme_minimal() +
+  coord_flip()
+
+ggarrange(g1, g2, ncol = 2, nrow = 1)
+```
+
+## 4 Summary and modelling plan
+Taking all the sources, the exploratory analysis suggests that it takes a while to process to get word and phrase patterns. Some issues that need further attention for the rest of the project:
+
+1.**Foreign words and misspelled.** The boundary between foreign words and misspelled is not clear cut. However, these words may not account for a big share of the occurrence. Probability-wise, one may need to set-up a threshold to decide how many words are covered by the prediction model to guarantee the robustness and accuracy of the model output.
+
+2.**Out-of-Vocabulary words.** Despite huge amount of data, there is still possibility to encounter new word as the input to the model in practice. Therefore, some mechanism of dealing with this situation (OOV) needs to be implemented.
+
+3.**Fast-enough solution for model iterations.** To reach fast-enough iteration of model design, some measures are needed. For example, the initial tuning can use a subset of the full data.
+
+### Next steps
+1. Build a basic n-gram model for predicting the next word based on the previous 1, 2, or 3 words. This model shall handle unseen n-grams.
+
+2. Refine the n-gram and backoff models to increase their efficiency and accuracy.
+
+3. Explore more advanced techniques to improve the predictive model and compare them with the basic ones.
+
+4. Develop a data product with the implemented prediction algorithm using a Shiny app.
+
+5. Create a slide deck to pitch the prediction algorithm.
+
+## Resources
+1. Silge, Julia and Robinson, David. [Text Mining with R: A Tidy Approach](https://github.com/dgrtwo/tidy-text-mining). O'Reilly Media, Inc. (2017).
+2. Kandi, Shabeel. [Handling Out-of-Vocabulary Words in Natural Language Processing based on Context](https://medium.com/@shabeelkandi/handling-out-of-vocabulary-words-in-natural-language-processing-based-on-context-4bbba16214d5). media.com (2018)

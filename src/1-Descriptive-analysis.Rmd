@@ -8,7 +8,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-This notebook explores the Corpora data. And it answers the questions in Week 1 quiz of [Data Sciencen Capstone](https://www.coursera.org/learn/data-science-project).
+This notebook explores the Corpora data. And it answers the questions in Week 1 quiz of [Data Science Capstone](https://www.coursera.org/learn/data-science-project).
 
 ```{r libs, include=TRUE, warning=FALSE, message=FALSE}
 library(tm)
@@ -92,7 +92,7 @@ word_match_get <- function(f, wd){
 
 ```
 
-#### 3-1 Occurance of "love" over "hate"
+#### 3-1 Occurrence of "love" over "hate"
 Divide the number of lines where the word "love" (all lowercase) occurs by the number of lines the word "hate" (all lowercase) occurs.
 ```{r tweets-love-hate, warning=FALSE, message=FALSE}
 var <- 'twitter'
@@ -108,7 +108,7 @@ f <- paste0("../dbs/en_US/en_US.", var, ".txt")
 word_match_get(f, 'biostats')
 ```
 
-#### 3-3 Occurance a sentence
+#### 3-3 Occurrence a sentence
 "A computer once beat me at chess, but it was no match for me at kickboxing"
 
 ```{r tweets-sentence, warning=FALSE, message=FALSE}

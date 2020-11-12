@@ -1,0 +1,47 @@
+---
+title: "test"
+author: "Yuan Liao"
+date: "11/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+<div class="alert alert-info">
+  <strong>Note of stop words.</strong> In sentiment analysis for example, stop words are often removed due to little relevant information. In the context of this project, however, it is important to keep stop words as the core purpose is to predict next word.
+</div>
+
+### test {.tabset}
+#### A car dataset
+**tst**
+```{r cars}
+summary(cars)
+```
+
+#### Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+## {-}
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+## 4 Summary and modelling plan
+Taking all the sources, the exploratory analysis suggests that it takes a while to process to get word and phrase patterns. Some issues that need further attention for the rest of the project:
+
+1.**Foreign words and misspelled.** The boundary between foreign words and misspelled is not clear cut. However, these words may not account for a big share of the occurrence. Probability-wise, one may need to set-up a threshold to decide how many words are covered by the prediction model to guarantee the robustness and accuracy of the model output.
+
+2.**Out-of-Vocabulary words.** Despite huge amount of data, there is still possibility to encounter new word as the input to the model in practice. Therefore, some mechanism of dealing with this situation (OOV) needs to be implemented.
+
+3.**Fast-enough solution for model iterations.** To reach fast-enough iteration of model design, some measures are needed. For example, the initial tuning can use a subset of the full data.
+
+## Resources
+1. Silge, Julia and Robinson, David. [Text Mining with R: A Tidy Approach](https://github.com/dgrtwo/tidy-text-mining). O'Reilly Media, Inc. (2017).
+2. Kandi, Shabeel. [Handling Out-of-Vocabulary Words in Natural Language Processing based on Context](https://medium.com/@shabeelkandi/handling-out-of-vocabulary-words-in-natural-language-processing-based-on-context-4bbba16214d5). media.com (2018)
