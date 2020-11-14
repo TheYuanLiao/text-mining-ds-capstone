@@ -1,0 +1,94 @@
+---
+title: "Next Word Prediction - a Shiny app"
+author: "Yuan Liao"
+date: "11/14/2020"
+output: slidy_presentation
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(dplyr)
+library(stringr)
+
+load(file = "dbs/model_reduced.rda")
+candidates <- function(input, data){
+  wds <- paste(tail(unlist(str_split(trimws(input, whitespace = "[ \t\r\n]"), " ")), 2), collapse=" ")
+  wds <- tolower(gsub("[[:punct:]]", "", wds))
+  two <- data$c1[data$c1$bigram == wds, c('word', 'p_bo_c1')]
+  if (nrow(two) == 0){
+    last.word <- unlist(str_split(wds, " "))[-1]
+    one <- data$c2[grep(paste0("^",last.word), data$c2$bigram_lst), c('word', 'p_bo_c2')]
+    if (nrow(one) == 0){
+      return(data$c3$word)
+      }else{
+      one <- one %>%
+        filter (! duplicated(word)) %>%
+        arrange(desc(p_bo_c2))
+      return(one$word)
+      }
+  }else{
+    two <- arrange(two, desc(p_bo_c1))
+    return(two$word)
+  }
+}
+GuessNext <- function(input, data){
+  guess <- candidates(input, data)
+  sentences <- paste(paste(input, guess[1], sep=' '),
+                     "   ",
+                     "Or...",
+                     "   ",
+                     paste(input, guess[2], sep=' '),
+                     paste(input, guess[3], sep=' '),
+                     paste(input, guess[4], sep=' '),
+                     paste(input, guess[5], sep=' '),
+                     sep = "\n")
+  cat(sentences)
+}
+
+```
+## Next word prediction based on previous two
+[Next Word Prediction](https://yuanliao.shinyapps.io/NextWordPrediction/) is a Shiny app that
+
+- Returns the most likely next word based on the user's customized input.
+
+- Provides the top 5 candidate words.
+
+- Uses the web-crawled data.
+
+A milestone report of this project can be found [here](https://rpubs.com/TheYuanLiao/word-prediction-corpora-milestone-report), with more details about the data used to build this model.
+
+## Katz's back-off model based on 3-grams
+$P_{bo}\left(w_3\mid w_1, w_2\right)=\begin{cases}d_{w_1,w_2, w_3}\frac{C\left(w_1,w_2, w_3\right)}{C\left(w_1,w_2\right)} & \text{if } C\left(w_1,w_2, w_3\right) > 0\\\alpha_{w_1,w_2}P_{bo}\left(w_3\mid w_2\right) & \text{otherwise}\end{cases}$
+
+where $C$ is the frequency of a sequence of woprds appears in the dataset and $w$ indicates word.
+
+The algorithm evaluates $d$ and $\alpha$ using the below methods.
+
+- $d$ is the amount of discounting found by [Good-Turing estimation](https://en.wikipedia.org/wiki/Good%E2%80%93Turing_frequency_estimation): $d=\frac{C^*}{C},\text{ where } C^*=\left(C+1\right)\frac{N_{C+1}}{N_{C}}$
+
+where $N_C$ is the frequency of frequency with value $C$.
+
+- $\alpha_{w_1,w_2}=\frac{\beta_{w_1,w_2}}{\sum_{w_3:C\left(w_1,w_2,w_3\right)>0}P_{bo}\left(w_3\mid w_2\right)}$
+
+where $\beta$ can be calculated as below:
+
+$\beta_{w_1,w_2}=1-\sum_{w_3:C\left(w_1,w_2,w_3\right)>0}d_{w_1,w_2, w_3}\frac{C\left(w_1,w_2, w_3\right)}{C\left(w_1,w_2\right)}$
+
+## Demo 1
+One can type in two words, the app returns the most likely next one among the top 5 best guesses.
+
+```{r demo1, include=TRUE, echo=TRUE}
+GuessNext("I love", model.r)
+```
+
+## Demo 2
+One can also type in a sentence, however, the app will only consider the last two words to predict the next one.
+
+```{r demo2, include=TRUE, echo=TRUE}
+GuessNext("Today is really a good", model.r)
+```
+
+## Limitations and future work
+This Shiny app uses a very simple and basic model to predict next word based on the latest two words. If a sentence gets long, the model is not able to capture the context. 
+
+More advanced techniques such as word embedding and deep learning should deliver a better next word prediction than the current one.
